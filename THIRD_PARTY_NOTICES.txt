@@ -1,0 +1,39 @@
+PDFYA by Codpact — Third-party software notices
+==========================================
+
+PDFYA is free software licensed under the GNU Affero General Public
+License v3.0 (see LICENSE.txt). Its complete source code is shipped in the
+"source" folder of the installation directory.
+
+PDFYA bundles the following libraries. Each remains under its own license.
+
+Library                 License                         Website
+----------------------  ------------------------------  -----------------------------------------------
+PyMuPDF / MuPDF         GNU AGPL-3.0 (or Artifex        https://github.com/pymupdf/PyMuPDF
+                        commercial license)
+pdf2docx                MIT                             https://github.com/ArtifexSoftware/pdf2docx
+Qt for Python (PySide6) LGPL-3.0                        https://www.qt.io/qt-for-python
+Qt 6                    LGPL-3.0                        https://www.qt.io
+Pillow                  MIT-CMU (HPND)                  https://python-pillow.org
+openpyxl                MIT                             https://foss.heptapod.net/openpyxl/openpyxl
+et_xmlfile              MIT                             https://foss.heptapod.net/openpyxl/et_xmlfile
+python-pptx             MIT                             https://github.com/scanny/python-pptx
+python-docx             MIT                             https://github.com/python-openxml/python-docx
+XlsxWriter              BSD-2-Clause                    https://github.com/jmcnamara/XlsxWriter
+lxml                    BSD-3-Clause                    https://lxml.de
+fontTools               MIT                             https://github.com/fonttools/fonttools
+NumPy                   BSD-3-Clause (and others)       https://numpy.org
+opencv-python-headless  Apache-2.0                      https://github.com/opencv/opencv-python
+fire                    Apache-2.0                      https://github.com/google/python-fire
+termcolor               MIT                             https://github.com/termcolor/termcolor
+packaging               Apache-2.0 OR BSD-2-Clause      https://github.com/pypa/packaging
+typing_extensions       PSF-2.0                         https://github.com/python/typing_extensions
+pywin32                 PSF                             https://github.com/mhammond/pywin32
+Python                  PSF-2.0                         https://www.python.org
+Tcl/Tk                  Tcl/Tk license (BSD-style)      https://www.tcl.tk
+
+Optional, not bundled (installed separately by the user):
+Tesseract OCR           Apache-2.0                      https://github.com/tesseract-ocr/tesseract
+
+The full license text of each library is available at its website and inside
+its package metadata in the "source" build environment (pip show -f <name>).
