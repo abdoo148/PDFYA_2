@@ -40,9 +40,9 @@ CloseApplications=yes
 
 [Languages]
 #if FileExists(CompilerPath + "Languages\Arabic.isl")
-Name: "arabic"; MessagesFile: "compiler:Languages\Arabic.isl"
+Name: "arabic"; MessagesFile: "compiler:Languages\Arabic.isl"; InfoBeforeFile: "docs\install_notes_ar.txt"
 #endif
-Name: "english"; MessagesFile: "compiler:Default.isl"
+Name: "english"; MessagesFile: "compiler:Default.isl"; InfoBeforeFile: "docs\install_notes_en.txt"
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
@@ -51,6 +51,7 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Source: "dist\PDFYA\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "LICENSE.txt"; DestDir: "{app}"; Flags: ignoreversion
 Source: "THIRD_PARTY_NOTICES.txt"; DestDir: "{app}"; Flags: ignoreversion
+Source: "docs\install_notes_*.txt"; DestDir: "{app}"; Flags: ignoreversion
 ; الكود المصدري الكامل (مطلوب بترخيص AGPL عند توزيع البرنامج)
 Source: "app.py"; DestDir: "{app}\source"; Flags: ignoreversion
 Source: "core.py"; DestDir: "{app}\source"; Flags: ignoreversion

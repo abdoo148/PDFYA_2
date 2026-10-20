@@ -8,7 +8,7 @@
 
 **برنامج ويندوز مجاني يعمل بدون إنترنت لتوقيع ملفات PDF وتعديلها وتحويلها وتنظيمها، بدعم كامل للغة العربية.**
 
-[English](README.md) · [التنزيل](https://github.com/abdoo148/PDFYA_2/raw/main/release/PDFYA-Setup-1.4.0.exe) · [سجل التغييرات](CHANGELOG.md)
+[English](README.md) · [التنزيل](https://github.com/abdoo148/PDFYA_2/releases/latest) · [سجل التغييرات](CHANGELOG.md)
 
 من إنتاج **Codpact للحلول الرقمية**
 
@@ -70,8 +70,8 @@
 
 ## التنزيل
 
-**[⬇ تنزيل PDFYA-Setup-1.4.0.exe](https://github.com/abdoo148/PDFYA_2/raw/main/release/PDFYA-Setup-1.4.0.exe)** (ملف التثبيت، حوالي 90 ميجا، لا يحتاج صلاحيات مسؤول) —
-أو افتح مجلد [`release`](release) واضغط **Download raw file**.
+**[⬇ تنزيل PDFYA-Setup-1.4.0.exe](https://github.com/abdoo148/PDFYA_2/releases/download/v1.4.0/PDFYA-Setup-1.4.0.exe)** (ملف التثبيت، حوالي 87 ميجا، لا يحتاج صلاحيات مسؤول) —
+أو شاهد كل الإصدارات في [صفحة الإصدارات](https://github.com/abdoo148/PDFYA_2/releases/latest).
 
 إضافات اختيارية:
 - **تحويل Word / Excel / PowerPoint إلى PDF** يحتاج Microsoft Office أو [LibreOffice](https://www.libreoffice.org/) المجاني.

@@ -1,0 +1,31 @@
+﻿Before installing PDFYA
+=======================
+
+1) "Windows protected your PC" (SmartScreen)
+   This appears because the app is new and not code-signed yet — not because something is wrong.
+   To continue: click "More info", then "Run anyway".
+
+2) Antivirus
+   Some antivirus programs may flag the app by mistake because it is built with Python and isn't signed.
+   The app is fully open source: https://github.com/abdoo148/PDFYA_2
+   If the file is blocked, add it as an exception, and only download it from the official link.
+
+3) No administrator rights are needed; the app is installed for your account only.
+   You can choose to install it for all users on the first screen if you prefer.
+
+4) The first launch may take a few seconds (the PDFYA screen appears while it loads).
+
+5) Optional features that need extra free programs:
+   - Word / Excel / PowerPoint to PDF: needs Microsoft Office or LibreOffice.
+   - Text recognition (OCR): needs Tesseract — select Arabic during its installation:
+     https://github.com/UB-Mannheim/tesseract/wiki
+   Everything else works right away with no extras.
+
+6) Privacy: the app runs entirely on your computer and never uploads your files.
+   Your signature library and settings are stored in %APPDATA%\PDFYA.
+
+7) Signatures in PDFYA are images placed on the page, not certificate-based digital signatures.
+
+8) To uninstall: Settings > Apps > PDFYA > Uninstall.
+
+PDFYA — by Codpact Digital Solutions

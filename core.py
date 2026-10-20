@@ -32,7 +32,7 @@ APP_LICENSE = "AGPL-3.0"
 #   - GitHub Releases: https://api.github.com/repos/<user>/<repo>/releases/latest
 #   - أو ملف JSON بالشكل: {"version": "1.3.0", "url": "رابط صفحة التنزيل", "notes": "ما الجديد"}
 # يمكن تغييره بدون إعادة بناء عبر المفتاح "update_url" في settings.json
-UPDATE_URL = "https://api.github.com/repos/abdoo148/PDFYA/releases/latest"
+UPDATE_URL = "https://api.github.com/repos/abdoo148/PDFYA_2/releases/latest"
 
 # PyMuPDF لا يدعم العمل المتوازي: كل استدعاء له من خيط آخر يجب أن يمسك هذا القفل.
 FITZ_LOCK = threading.RLock()
