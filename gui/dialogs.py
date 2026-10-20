@@ -409,7 +409,7 @@ class AboutDialog(Dialog):
         by = label(tr("من إنتاج {0}", core.PUBLISHER_AR), "h2")
         by.setAlignment(Qt.AlignCenter)
         self.lay.addWidget(by)
-        self.lay.addWidget(publisher_logo(220, 56), 0, Qt.AlignHCenter)
+        self.lay.addWidget(publisher_logo(170, 120), 0, Qt.AlignHCenter)
         body = label(
             tr("برنامج مجاني لتوقيع ملفات PDF وتحويل الصيغ وأدوات PDF والتعرف على النص. يعمل بالكامل على جهازك، ولا تُرفع ملفاتك إلى أي مكان.<br><br><b>ملاحظة:</b> التوقيع هنا صورة مرسومة على الصفحة، وليس توقيعًا رقميًا معتمدًا بشهادة.<br><br>© 2026 {0}. برنامج حر مرخّص بـ GNU AGPL-3.0، والكود المصدري مرفق في مجلد <b>source</b> داخل مجلد التثبيت.", core.PUBLISHER_AR))
         body.setTextFormat(Qt.RichText)

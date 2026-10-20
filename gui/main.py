@@ -106,7 +106,7 @@ class MainWindow(QMainWindow):
         made.setObjectName("version")
         made.setAlignment(Qt.AlignCenter)
         sl.addWidget(made)
-        sl.addWidget(publisher_logo(150, 34), 0, Qt.AlignHCenter)
+        sl.addWidget(publisher_logo(120, 86), 0, Qt.AlignHCenter)
         ver = QLabel(tr("{0}\nالإصدار {1}", core.PUBLISHER_AR, core.APP_VERSION))
         ver.setAlignment(Qt.AlignCenter)
         ver.setObjectName("version")
