@@ -11,7 +11,7 @@
 ![UI](https://img.shields.io/badge/UI-Arabic%20%7C%20English-1F5FBF)
 ![License](https://img.shields.io/badge/license-AGPL--3.0-green)
 
-[العربية](README.ar.md) · [Download](../../releases/latest) · [Changelog](CHANGELOG.md)
+[العربية](README.ar.md) · [Download](https://github.com/abdoo148/PDFYA_2/raw/main/release/PDFYA-Setup-1.4.0.exe) · [Changelog](CHANGELOG.md)
 
 Made by **Codpact — Codpact Digital Solutions**
 
@@ -73,10 +73,8 @@ Made by **Codpact — Codpact Digital Solutions**
 
 ## Download
 
-Get the latest version from the [Releases page](../../releases/latest):
-
-- `PDFYA-Setup-x.y.z.exe` — installer (no admin rights needed).
-- `PDFYA-x.y.z-portable.zip` — unzip and run `PDFYA.exe`.
+**[⬇ Download PDFYA-Setup-1.4.0.exe](https://github.com/abdoo148/PDFYA_2/raw/main/release/PDFYA-Setup-1.4.0.exe)** (installer, ~90 MB, no admin rights needed) —
+or open the [`release`](release) folder and click **Download raw file**.
 
 Optional extras:
 - **Word / Excel / PowerPoint → PDF** needs Microsoft Office or the free [LibreOffice](https://www.libreoffice.org/).
@@ -89,8 +87,8 @@ Optional extras:
 Requires Windows and Python 3.10+ (developed with Python 3.14).
 
 ```bash
-git clone https://github.com/abdoo148/PDFYA.git
-cd PDFYA
+git clone https://github.com/abdoo148/PDFYA_2.git
+cd PDFYA_2
 python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt

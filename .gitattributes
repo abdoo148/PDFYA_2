@@ -3,3 +3,5 @@
 *.iss text eol=crlf
 *.png binary
 *.ico binary
+*.exe binary
+*.zip binary
