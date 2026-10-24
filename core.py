@@ -9,6 +9,7 @@ import shutil
 import subprocess
 import sys
 import threading
+import time
 import unicodedata
 import urllib.request
 
@@ -25,7 +26,7 @@ APP_TAGLINE = tr("موقّع ومحوّل الملفات")
 PUBLISHER = "Codpact"
 PUBLISHER_AR = tr("Codpact للحلول الرقمية")
 LEGACY_APP_NAMES = ("Pedo", "SignConvert")  # أسماء سابقة: تُنسخ بيانات أحدثها تلقائيًا عند أول تشغيل
-APP_VERSION = "1.4.0"
+APP_VERSION = "1.5.0"
 
 APP_LICENSE = "AGPL-3.0"
 # رابط التحقق من التحديثات (فارغ = معطّل). يقبل:
@@ -704,6 +705,72 @@ def add_watermark(path, out_path, text, color=(200, 30, 30), opacity=0.25, angle
     return out_path
 
 
+# ---------------------------------------------------------------- معالجة متوازية (عمليات منفصلة)
+# OCR وتحويل PDF إلى Word عمليات حسابية بطيئة لكل صفحة؛ نوزّع الصفحات على عدة عمليات (لا خيوط:
+# PyMuPDF غير آمن مع الخيوط، والعمليات المنفصلة تستغل كل أنوية المعالج). كل عملية تفتح الملف بنفسها.
+def worker_count(n_tasks, cap=6):
+    cpu = os.cpu_count() or 2
+    return max(1, min(n_tasks, cpu - 1, cap))
+
+
+def _worker_init():
+    import logging
+    logging.disable(logging.INFO)
+    try:  # أولوية أقل من الواجهة حتى يبقى البرنامج سلسًا أثناء المعالجة
+        import win32api
+        import win32process
+        win32process.SetPriorityClass(win32api.GetCurrentProcess(), win32process.BELOW_NORMAL_PRIORITY_CLASS)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def run_parallel(func, tasks, progress=None, weights=None, base=0.0, span=1.0):
+    """
+    يشغّل func(task) لكل مهمة في عمليات منفصلة ويرجع النتائج (بأي ترتيب).
+    التقدم = base + span × (وزن المنجز / الوزن الكلي) من 1. الإلغاء يُنهي العمليات فورًا.
+    """
+    import multiprocessing as mp
+    weights = weights or [1] * len(tasks)
+    total_w = float(sum(weights)) or 1.0
+
+    def tick(done_w):
+        _tick(progress, base + span * done_w / total_w, 1.0)  # يرفع Cancelled عند الإلغاء
+
+    n = worker_count(len(tasks))
+    results, done_w = [], 0.0
+    if n <= 1:
+        for task, w in zip(tasks, weights):
+            tick(done_w)
+            results.append(func(task))
+            done_w += w
+            tick(done_w)
+        return results
+    pool = mp.get_context("spawn").Pool(n, initializer=_worker_init)
+    try:
+        it = pool.imap_unordered(_indexed_call, [(func, k, t) for k, t in enumerate(tasks)])
+        while len(results) < len(tasks):
+            try:
+                k, res = it.next(timeout=0.4)
+            except mp.TimeoutError:
+                tick(done_w)  # فحص الإلغاء أثناء الانتظار
+                continue
+            results.append(res)
+            done_w += weights[k]
+            tick(done_w)
+        pool.close()
+        return results
+    except BaseException:
+        pool.terminate()
+        raise
+    finally:
+        pool.join()
+
+
+def _indexed_call(args):
+    func, k, task = args
+    return k, func(task)
+
+
 # ---------------------------------------------------------------- التحويل
 def images_to_pdf(paths, out_path, progress=None):
     doc = fitz.open()
@@ -736,16 +803,127 @@ def pdf_to_images(path, out_dir, dpi=150, fmt="png", jpg_quality=85, progress=No
     return outs
 
 
-def pdf_to_word(path, out_dir):
-    from pdf2docx import Converter  # استيراد متأخر لتسريع فتح البرنامج
-
-    name = os.path.splitext(os.path.basename(path))[0]
-    out = unique_path(os.path.join(out_dir, f"{name}.docx"))
-    cv = Converter(path)
+def _w_pdf2docx_chunk(task):
+    """(في عملية منفصلة) يحوّل مجموعة صفحات متتالية إلى ملف docx مستقل."""
+    src, out, start, end = task
+    from pdf2docx import Converter
+    cv = Converter(src)
     try:
-        cv.convert(out)
+        cv.convert(out, start=start, end=end)
     finally:
         cv.close()
+    return start, out
+
+
+class _PdfDocxProgress:
+    """يقرأ سجل pdf2docx «(i/n) Page» ليعطي تقدمًا لكل صفحة في التحويل غير المتوازي (ويُتيح الإلغاء)."""
+
+    def __init__(self, progress):
+        import logging
+        import re
+        self.progress, self.phase = progress, 0
+        self.rx = re.compile(r"\((\d+)/(\d+)\) Page")
+        outer = self
+
+        class H(logging.Handler):
+            def emit(self, record):
+                msg = record.getMessage()
+                if "[4/4]" in msg:
+                    outer.phase = 1
+                m = outer.rx.match(msg)
+                if m:
+                    i, n = int(m.group(1)), int(m.group(2))
+                    # التحليل ~ النصف الأول والإنشاء ~ النصف الثاني (من القياس)
+                    _tick(outer.progress, (outer.phase + (i - 1) / n) / 2, 1)  # يرفع Cancelled عند الإلغاء
+
+        self.handler, self.logging = H(level=logging.INFO), logging
+
+    def __enter__(self):
+        root = self.logging.getLogger()
+        self.old_level = root.level
+        root.setLevel(self.logging.INFO)
+        root.addHandler(self.handler)
+        return self
+
+    def __exit__(self, *exc):
+        root = self.logging.getLogger()
+        root.removeHandler(self.handler)
+        root.setLevel(self.old_level)
+        return False
+
+
+def _merge_docx(parts, out):
+    """يدمج ملفات docx بالترتيب مع فاصل قسم (صفحة جديدة) بين كل جزء والذي يليه."""
+    import sys as _sys
+    import types
+    from copy import deepcopy
+    try:
+        import babel.dates  # noqa: F401
+    except ImportError:  # babel مستبعدة من نسخة EXE (32 م.ب) — docxcompose تستخدمها فقط لتواريخ خصائص المستند
+        stub = types.ModuleType("babel.dates")
+        stub.format_datetime = lambda dt, *a, **k: dt.isoformat() if hasattr(dt, "isoformat") else str(dt)
+        _sys.modules.setdefault("babel", types.ModuleType("babel"))
+        _sys.modules["babel.dates"] = stub
+    from docx import Document
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+    from docxcompose.composer import Composer
+
+    def end_with_section_break(doc):
+        body = doc.element.body
+        sect = body.find(qn("w:sectPr"))
+        last = sect.getprevious()
+        if last is not None and last.tag == qn("w:p") and last.find(qn("w:pPr") + "/" + qn("w:sectPr")) is None:
+            ppr = last.find(qn("w:pPr"))
+            if ppr is None:
+                ppr = OxmlElement("w:pPr")
+                last.insert(0, ppr)
+            ppr.append(deepcopy(sect))
+        else:
+            para, ppr = OxmlElement("w:p"), OxmlElement("w:pPr")
+            ppr.append(deepcopy(sect))
+            para.append(ppr)
+            sect.addprevious(para)
+
+    composer = Composer(Document(parts[0]))
+    for p in parts[1:]:
+        end_with_section_break(composer.doc)
+        composer.append(Document(p))
+    composer.save(out)
+
+
+def pdf_to_word(path, out_dir, progress=None):
+    """
+    PDF إلى Word. الملفات الصغيرة تُحوَّل مباشرة مع تقدم لكل صفحة، والكبيرة تُقسَّم إلى أجزاء
+    تُحوَّل بالتوازي على عدة أنوية ثم تُدمج (أسرع ~4 مرات على جهاز بـ 8 أنوية).
+    """
+    import tempfile
+    name = os.path.splitext(os.path.basename(path))[0]
+    out = unique_path(os.path.join(out_dir, f"{name}.docx"))
+    with open_pdf(path) as d:
+        n = len(d)
+    workers = worker_count(n)
+    if n <= 1 or workers <= 1:
+        from pdf2docx import Converter
+        cv = Converter(path)
+        try:
+            with _PdfDocxProgress(progress):
+                cv.convert(out)
+        finally:
+            cv.close()
+        _tick(progress, 1, 1)
+        return out
+    size = max(1, min(10, -(-n // (workers * 2))))  # أجزاء صغيرة = تقدم أدق وتوزيع أعدل
+    tmp = tempfile.mkdtemp(prefix="pdfya_docx_")
+    try:
+        chunks = [(path, os.path.join(tmp, f"part_{s:05d}.docx"), s, min(s + size, n)) for s in range(0, n, size)]
+        done = dict(run_parallel(_w_pdf2docx_chunk, chunks, progress, weights=[c[3] - c[2] for c in chunks],
+                                 span=0.9))
+        _tick(progress, 0.92, 1)
+        _merge_docx([done[k] for k in sorted(done)], out)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    _tick(progress, 1, 1)
     return out
 
 
@@ -896,44 +1074,53 @@ def _open_any(path):
     return fitz.open(path)
 
 
+def _w_ocr_page(task):
+    """(في عملية منفصلة) OCR لصفحة واحدة. mode=pdf يرجع PDF قابلًا للبحث، mode=text يرجع النص."""
+    path, i, lang, dpi, tessdata, mode = task
+    with _open_any(path) as src:
+        page = src[i]
+        if mode == "pdf":
+            pix = page.get_pixmap(dpi=dpi, alpha=False)
+            return i, pix.pdfocr_tobytes(language=lang, tessdata=tessdata)
+        tp = page.get_textpage_ocr(language=lang, dpi=dpi, full=True, tessdata=tessdata)
+        return i, page.get_text("text", textpage=tp).strip()  # بدون sort: الترتيب يعكس الكلمات العربية
+
+
 def ocr_pdf(path, out_dir, lang="ara+eng", dpi=300, progress=None):
     """
     ينتج PDF قابلًا للبحث والنسخ من ملف ممسوح (PDF أو صورة).
-    الصفحات التي تحتوي نصًا بالفعل تُنسخ كما هي.
+    الصفحات التي تحتوي نصًا بالفعل تُنسخ كما هي، والباقي يُعالج بالتوازي على عدة أنوية.
     """
     tessdata = _ocr_ready(lang)
     name = os.path.splitext(os.path.basename(path))[0]
     out = unique_path(os.path.join(out_dir, tr("{0}_قابل_للبحث.pdf", name)))
+    with _open_any(path) as src:
+        n = len(src)
+        need = [i for i in range(n) if not (src.is_pdf and src[i].get_text().strip())]
+    ocr = dict(run_parallel(_w_ocr_page, [(path, i, lang, dpi, tessdata, "pdf") for i in need], progress, span=0.97))
     result = fitz.open()
     try:
         with _open_any(path) as src:
-            is_pdf = src.is_pdf
-            for i, page in enumerate(src):
-                if is_pdf and page.get_text().strip():
-                    result.insert_pdf(src, from_page=i, to_page=i)
-                else:
-                    pix = page.get_pixmap(dpi=dpi, alpha=False)
-                    pdf_bytes = pix.pdfocr_tobytes(language=lang, tessdata=tessdata)
-                    with fitz.open("pdf", pdf_bytes) as op:
+            for i in range(n):
+                if i in ocr:
+                    with fitz.open("pdf", ocr[i]) as op:
                         result.insert_pdf(op)
-                _tick(progress, i + 1, len(src))
+                else:
+                    result.insert_pdf(src, from_page=i, to_page=i)
         _save(result, out)
     finally:
         result.close()
+    _tick(progress, 1, 1)
     return out
 
 
 def ocr_text(path, lang="ara+eng", dpi=300, progress=None):
-    """يرجع قائمة بنص كل صفحة."""
+    """يرجع قائمة بنص كل صفحة (الصفحات تُعالج بالتوازي)."""
     tessdata = _ocr_ready(lang)
-    pages = []
     with _open_any(path) as src:
-        for i, page in enumerate(src):
-            tp = page.get_textpage_ocr(language=lang, dpi=dpi, full=True, tessdata=tessdata)
-            # بدون sort: الترتيب يعكس الكلمات العربية
-            pages.append(page.get_text("text", textpage=tp).strip())
-            _tick(progress, i + 1, len(src))
-    return pages
+        n = len(src)
+    texts = dict(run_parallel(_w_ocr_page, [(path, i, lang, dpi, tessdata, "text") for i in range(n)], progress))
+    return [texts[i] for i in range(n)]
 
 
 def ocr_to_txt(path, out_dir, lang="ara+eng", dpi=300, progress=None):
@@ -986,73 +1173,281 @@ def _find_soffice():
     return None
 
 
-def _office_com_to_pdf(src, out):
-    """تحويل عبر Microsoft Office (ويندوز فقط). يرفع استثناء إن لم يتوفر."""
-    import pythoncom
-    import win32com.client as wc
+DUMMY_PASSWORD = "pdfya-no-password-9"  # الملفات غير المحمية تتجاهلها، والمحمية تفشل فورًا
 
-    pythoncom.CoInitialize()
-    ext = os.path.splitext(src)[1].lower()
-    src, out = os.path.abspath(src), os.path.abspath(out)
-    try:
-        if ext in (".doc", ".docx", ".rtf", ".odt"):
-            app = wc.DispatchEx("Word.Application")
-            app.Visible = False
+
+class OfficeTimeout(RuntimeError):
+    """توقف Office/LibreOffice عن الاستجابة وأوقفناه."""
+
+
+class OfficeSession:
+    """
+    تحويل Word / Excel / PowerPoint إلى PDF عبر Microsoft Office، مع:
+      - نسخة واحدة من كل برنامج لكل الملفات (يوفر 3-6 ثوانٍ تشغيل لكل ملف إضافي).
+      - فتح صامت: بدون رسائل أو ماكرو أو تحديث روابط، والملفات المحمية بكلمة مرور تفشل فورًا بدل انتظار نافذة مخفية.
+      - مراقِب (watchdog) في خيط منفصل: يُنهي عملية Office التي شغّلناها نحن فقط عند الإلغاء أو تجاوز المهلة.
+      - تقدير زمن حسب عدد الصفحات واللغة، وتقدّم يتحرك أثناء التحويل.
+    progress: دالة RunBar (done, total) ولها اختياريًا .cancelled() و .status(text).
+    """
+    EXES = {"word": "WINWORD.EXE", "excel": "EXCEL.EXE", "powerpoint": "POWERPNT.EXE"}
+    OPEN_TIMEOUT = 120  # ثانية: فتح الملف (نافذة مخفية عالقة = توقف هنا)
+
+    def __init__(self, progress=None):
+        self.progress = progress
+        self.apps = {}
+        self.pids = {}
+        self._killed = None  # None أو "cancel" أو "timeout"
+        self._deadline = None
+        self._estimate = None
+        self._task = None  # (i, n, label) للعرض
+        self._stop = threading.Event()
+        self._lock = threading.Lock()
+
+    # ---- دورة الحياة
+    def __enter__(self):
+        import pythoncom
+        pythoncom.CoInitialize()
+        self._watch = threading.Thread(target=self._watchdog, daemon=True)
+        self._watch.start()
+        return self
+
+    def __exit__(self, *exc):
+        self._stop.set()
+        for kind, app in list(self.apps.items()):
             try:
-                doc = app.Documents.Open(src, ReadOnly=True)
-                doc.SaveAs(out, FileFormat=17)
-                doc.Close(False)
-            finally:
                 app.Quit()
-        elif ext in (".xls", ".xlsx", ".xlsm", ".csv"):
-            app = wc.DispatchEx("Excel.Application")
-            app.Visible = False
-            app.DisplayAlerts = False
-            try:
-                wb = app.Workbooks.Open(src, ReadOnly=True)
-                wb.ExportAsFixedFormat(0, out)
-                wb.Close(False)
-            finally:
-                app.Quit()
-        elif ext in (".ppt", ".pptx"):
-            app = wc.DispatchEx("PowerPoint.Application")
-            try:
-                pres = app.Presentations.Open(src, ReadOnly=True, WithWindow=False)
-                pres.SaveAs(out, 32)
-                pres.Close()
-            finally:
-                app.Quit()
-        else:
-            raise ValueError(tr("صيغة غير مدعومة"))
-    finally:
+            except Exception:  # noqa: BLE001
+                pass
+        self.apps.clear()
+        time.sleep(0.3)
+        self._kill_all()  # أي نسخة لم تُغلق بسلام
+        import pythoncom
         pythoncom.CoUninitialize()
+        return False
+
+    # ---- العمليات
+    @staticmethod
+    def _running(exe):
+        try:
+            out = subprocess.run(["tasklist", "/FI", f"IMAGENAME eq {exe}", "/FO", "CSV", "/NH"],
+                                 capture_output=True, text=True, timeout=15,
+                                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)).stdout
+        except Exception:  # noqa: BLE001
+            return set()
+        pids = set()
+        for line in out.splitlines():
+            parts = [p.strip('"') for p in line.split('","')]
+            if len(parts) > 1 and parts[1].isdigit():
+                pids.add(int(parts[1]))
+        return pids
+
+    def _kill_all(self):
+        import signal
+        for pid in list(self.pids.values()):
+            if pid:
+                try:
+                    os.kill(pid, signal.SIGTERM)  # على ويندوز = TerminateProcess
+                except OSError:
+                    pass
+        self.pids.clear()
+
+    def _app(self, kind):
+        if kind in self.apps:
+            return self.apps[kind]
+        import win32com.client as wc
+        exe = self.EXES[kind]
+        before = self._running(exe)
+        app = wc.DispatchEx({"word": "Word.Application", "excel": "Excel.Application",
+                             "powerpoint": "PowerPoint.Application"}[kind])
+        new = self._running(exe) - before
+        self.pids[kind] = max(new) if new else None  # النسخة التي شغّلناها نحن فقط
+        for attr, value in {
+            "word": (("Visible", False), ("DisplayAlerts", 0), ("ScreenUpdating", False), ("AutomationSecurity", 3)),
+            "excel": (("Visible", False), ("DisplayAlerts", False), ("AskToUpdateLinks", False),
+                      ("ScreenUpdating", False), ("AutomationSecurity", 3)),
+            "powerpoint": (("DisplayAlerts", 1), ("AutomationSecurity", 3)),
+        }[kind]:
+            try:
+                setattr(app, attr, value)
+            except Exception:  # noqa: BLE001
+                pass
+        self.apps[kind] = app
+        return app
+
+    # ---- المراقِب: إلغاء + مهلة + تقدّم متحرك
+    def _watchdog(self):
+        last_status = 0
+        while not self._stop.wait(0.4):
+            with self._lock:
+                deadline, est, task, started = self._deadline, self._estimate, self._task, getattr(self, "_t0", None)
+            if task is None:
+                continue
+            p = self.progress
+            cancelled = bool(p and getattr(p, "cancelled", None) and p.cancelled())
+            timed_out = deadline is not None and time.time() > deadline
+            if cancelled or timed_out:
+                self._killed = "cancel" if cancelled else "timeout"
+                self.apps.clear()
+                self._kill_all()
+                continue
+            if p and started:
+                i, n, label = task
+                elapsed = time.time() - started
+                if est:
+                    try:
+                        p(i + min(0.95, elapsed / est), n)
+                    except Exception:  # noqa: BLE001
+                        pass
+                if hasattr(p, "status") and time.time() - last_status >= 1:
+                    last_status = time.time()
+                    if est and elapsed <= est:
+                        extra = tr("— مضى {0} ث من حوالي {1} ث", int(elapsed), int(est))
+                    elif est:
+                        extra = tr("— مضى {0} ث (يأخذ وقتًا أطول قليلًا من المتوقع)", int(elapsed))
+                    else:
+                        extra = tr("— مضى {0} ث", int(elapsed))
+                    p.status(label + "  " + extra)
+
+    def _begin(self, i, n, label, timeout):
+        with self._lock:
+            self._task = (i, n, label)
+            self._t0 = time.time()
+            self._estimate = None
+            self._deadline = time.time() + timeout
+
+    def _set_estimate(self, label, est):
+        with self._lock:
+            spent = time.time() - (getattr(self, "_t0", None) or time.time())
+            self._estimate = spent + max(2.0, est)
+            self._deadline = time.time() + 90 + est * 3
+            self._task = (self._task[0], self._task[1], label)
+
+    def _end(self):
+        with self._lock:
+            self._task = self._deadline = self._estimate = None
+
+    def _raise_if_killed(self, err):
+        if self._killed == "cancel":
+            raise Cancelled()
+        if self._killed == "timeout":
+            raise OfficeTimeout(tr("توقف Microsoft Office عن الاستجابة أثناء تحويل الملف، فأوقفناه. "
+                                  "جرّب فتح الملف في Office للتأكد أنه سليم وغير محمي، ثم أعد المحاولة."))
+        msg = str(err)
+        if "password" in msg.lower() or "كلمة" in msg:
+            raise ValueError(tr("الملف محمي بكلمة مرور. افتحه في Office واحفظه بدون كلمة مرور، ثم حوّله."))
+        raise err
+
+    # ---- التحويل
+    def to_pdf(self, src, out, i=0, n=1):
+        ext = os.path.splitext(src)[1].lower()
+        src, out = os.path.abspath(src), os.path.abspath(out)
+        name = os.path.basename(src)
+        kind = ("word" if ext in (".doc", ".docx", ".rtf", ".odt") else
+                "excel" if ext in (".xls", ".xlsx", ".xlsm", ".csv") else
+                "powerpoint" if ext in (".ppt", ".pptx") else None)
+        if kind is None:
+            raise ValueError(tr("صيغة غير مدعومة"))
+        self._killed = None
+        self._begin(i, n, tr("يفتح «{0}»...", name), self.OPEN_TIMEOUT)
+        try:
+            app = self._app(kind)
+            if kind == "word":
+                # كلمة مرور وهمية: الملف المحمي يفشل فورًا بدل نافذة مخفية تنتظر للأبد
+                doc = app.Documents.Open(src, ConfirmConversions=False, ReadOnly=True, AddToRecentFiles=False,
+                                         PasswordDocument=DUMMY_PASSWORD, Visible=False, NoEncodingDialog=True)
+                try:
+                    pages = doc.ComputeStatistics(2)
+                    sample = doc.Range(0, min(doc.Content.End, 20000)).Text
+                    arabic = _has_arabic(sample)
+                    # من القياس على هذا الجهاز: العربي ~9 ث ثابتة + 1.8 ث/صفحة، والإنجليزي ~2 ث + 0.4 ث/صفحة
+                    est = 9 + pages * 1.8 if arabic else 2 + pages * 0.4
+                    self._set_estimate(tr("يحوّل «{0}» ({1} صفحة)", name, pages), est)
+                    doc.ExportAsFixedFormat(out, 17, OpenAfterExport=False, OptimizeFor=0, IncludeDocProps=True,
+                                            CreateBookmarks=1, DocStructureTags=True)
+                finally:
+                    try:
+                        doc.Close(0)
+                    except Exception:  # noqa: BLE001
+                        pass
+            elif kind == "excel":
+                wb = app.Workbooks.Open(src, UpdateLinks=0, ReadOnly=True, Password=DUMMY_PASSWORD,
+                                        IgnoreReadOnlyRecommended=True, AddToMru=False)
+                try:
+                    sheets = wb.Worksheets.Count
+                    self._set_estimate(tr("يحوّل «{0}» ({1} ورقة)", name, sheets), 2 + sheets * 0.6)
+                    wb.ExportAsFixedFormat(0, out)
+                finally:
+                    try:
+                        wb.Close(False)
+                    except Exception:  # noqa: BLE001
+                        pass
+            else:
+                pres = app.Presentations.Open(src, ReadOnly=True, Untitled=False, WithWindow=False)
+                try:
+                    slides = pres.Slides.Count
+                    self._set_estimate(tr("يحوّل «{0}» ({1} شريحة)", name, slides), 2 + slides * 0.3)
+                    pres.SaveAs(out, 32)
+                finally:
+                    try:
+                        pres.Close()
+                    except Exception:  # noqa: BLE001
+                        pass
+        except Exception as e:  # noqa: BLE001
+            self._raise_if_killed(e)
+        finally:
+            self._end()
+        if not os.path.exists(out):
+            raise RuntimeError(tr("لم يُنشئ Office ملف PDF لهذا الملف."))
+        return out
 
 
-def office_to_pdf(src, out_dir):
-    """Word/Excel/PowerPoint -> PDF. يجرب Office أولاً (ويندوز) ثم LibreOffice."""
+def _libreoffice_to_pdf(soffice, src, out_dir, progress=None, timeout=600):
+    """LibreOffice بملف إعدادات مستقل (حتى لا يتعارض مع نسخة مفتوحة عند المستخدم) مع إلغاء ومهلة."""
+    profile = os.path.join(data_dir(), "lo_profile").replace("\\", "/")
+    proc = subprocess.Popen(
+        [soffice, f"-env:UserInstallation=file:///{profile}", "--headless", "--norestore",
+         "--convert-to", "pdf", "--outdir", out_dir, src],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    t0 = time.time()
+    while proc.poll() is None:
+        time.sleep(0.4)
+        if progress and getattr(progress, "cancelled", None) and progress.cancelled():
+            proc.kill()
+            raise Cancelled()
+        if time.time() - t0 > timeout:
+            proc.kill()
+            raise OfficeTimeout(tr("توقف LibreOffice عن الاستجابة أثناء التحويل، فأوقفناه."))
+        if progress and hasattr(progress, "status"):
+            progress.status(tr("يحوّل «{0}» عبر LibreOffice — مضى {1} ث", os.path.basename(src), int(time.time() - t0)))
+
+
+def office_to_pdf(src, out_dir, session=None, progress=None, i=0, n=1):
+    """Word/Excel/PowerPoint -> PDF. يستخدم Microsoft Office إن وُجد، وإلا LibreOffice."""
     name = os.path.splitext(os.path.basename(src))[0]
     out = unique_path(os.path.join(out_dir, f"{name}.pdf"))
     errors = []
     if sys.platform.startswith("win"):
         try:
-            _office_com_to_pdf(src, out)
-            if os.path.exists(out):
-                return out
+            if session is not None:
+                return session.to_pdf(src, out, i, n)
+            with OfficeSession(progress) as s:
+                return s.to_pdf(src, out, i, n)
+        except (Cancelled, ValueError, OfficeTimeout):
+            raise
         except Exception as e:  # noqa: BLE001
             errors.append(f"Office: {e}")
     soffice = _find_soffice()
     if soffice:
         try:
-            subprocess.run(
-                [soffice, "--headless", "--convert-to", "pdf", "--outdir", out_dir, src],
-                check=True, capture_output=True, timeout=300,
-                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-            )
+            _libreoffice_to_pdf(soffice, src, out_dir, progress)
             produced = os.path.join(out_dir, name + ".pdf")
             if os.path.exists(produced):
                 if produced != out:
                     shutil.move(produced, out)
                 return out
+        except (Cancelled, OfficeTimeout):
+            raise
         except Exception as e:  # noqa: BLE001
             errors.append(f"LibreOffice: {e}")
     raise RuntimeError(

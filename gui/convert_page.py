@@ -20,7 +20,9 @@ OPS = [
        tr("يحوّل ملف PDF إلى مستند Word (.docx) يمكنك تعديله، مع الحفاظ على الفقرات والجداول والصور قدر الإمكان.<br><b>الناتج:</b> ملف بنفس الاسم بامتداد .docx.<br><b>تنبيه:</b> إذا كان الملف صورًا ممسوحة ضوئيًا فلن يظهر نص قابل للتعديل — استخدم «OCR إلى Word»."),
        *PDF, tr("حوّل إلى Word")),
     Op("word2pdf", tr("Word إلى PDF"), tr("ملفات docx و doc و rtf"),
-       tr("يحوّل مستندات Word إلى PDF بنفس الشكل تمامًا.<br><b>الناتج:</b> ملف PDF بنفس الاسم.") + OFFICE_NOTE,
+       tr("يحوّل مستندات Word إلى PDF بنفس الشكل تمامًا.<br><b>الناتج:</b> ملف PDF بنفس الاسم.") + OFFICE_NOTE
+       + tr("<br><b>المدة:</b> Word يحتاج بضع ثوانٍ ليبدأ، والمستندات العربية تأخذ حوالي ثانية ونصف لكل صفحة. "
+            "ستظهر المدة المتوقعة أثناء التحويل، ويمكنك الإلغاء في أي وقت."),
        (".docx", ".doc", ".rtf", ".odt"), tr("مستندات Word (*.docx *.doc *.rtf *.odt)"), tr("حوّل إلى PDF")),
     Op("excel2pdf", tr("Excel إلى PDF"), tr("ملفات xlsx و xls و csv"),
        tr("يحوّل ملفات Excel إلى PDF (كل الأوراق في الملف).<br><b>الناتج:</b> ملف PDF بنفس الاسم.") + OFFICE_NOTE,
@@ -50,6 +52,9 @@ OPS = [
        tr("يستخرج النص من الملفات الممسوحة أو الصور إلى ملف نصي بسيط، مع فاصل لكل صفحة.<br><b>الناتج:</b> «الملف_نص.txt»."),
        *PDF_IMG, tr("ابدأ التعرف على النص")),
 ]
+
+
+OFFICE_KEYS = ("word2pdf", "excel2pdf", "ppt2pdf")
 
 
 class ConvertPage(OperationPage):
@@ -126,6 +131,9 @@ class ConvertPage(OperationPage):
             return tr("التعرف على النص يحتاج برنامج Tesseract. اتبع التعليمات في قسم الإعدادات.")
         return None
 
+    def uses_pdf_engine(self, key):
+        return key not in OFFICE_KEYS  # تحويل Office لا يستخدم PyMuPDF فلا داعي لقفل عرض الصفحات
+
     def make_job(self, key, paths):
         outrow = self.outrow
         dpi = self.dpi.currentData()
@@ -135,6 +143,15 @@ class ConvertPage(OperationPage):
         ocr_dpi = self.ocr_dpi.currentData()
 
         def job(progress):
+            if key in OFFICE_KEYS:
+                # نسخة واحدة من Word/Excel/PowerPoint لكل الملفات، مع إلغاء فوري ومهلة وتقدير للمدة
+                last, n = None, len(paths)
+                with core.OfficeSession(progress) as session:
+                    for i, p in enumerate(paths):
+                        last = core.office_to_pdf(p, outrow.for_file(p), session=session, progress=progress, i=i, n=n)
+                        progress(i + 1, n)
+                what = tr("تم تحويل الملف") if n == 1 else tr("تم تحويل {0} ملفات", n)
+                return tr("{0}. الناتج في: {1}", what, os.path.dirname(last)), last
             if key == "img2pdf":
                 od = outrow.for_file(paths[0])
                 out = core.images_to_pdf(paths, core.unique_path(os.path.join(od, tr("صور_مدمجة.pdf"))), progress)
@@ -143,9 +160,7 @@ class ConvertPage(OperationPage):
             for i, p in enumerate(paths):
                 od, sub = outrow.for_file(p), sub_progress(progress, i, n)
                 if key == "pdf2word":
-                    last = core.pdf_to_word(p, od)
-                elif key in ("word2pdf", "excel2pdf", "ppt2pdf"):
-                    last = core.office_to_pdf(p, od)
+                    last = core.pdf_to_word(p, od, sub)
                 elif key == "pdf2img":
                     outs = core.pdf_to_images(p, od, dpi, fmt, quality, sub)
                     last = os.path.dirname(outs[-1])

@@ -995,4 +995,30 @@ EN = {
         "White",
     "عنصر":
         "Item",
+    "يفتح «{0}»...":
+        "Opening “{0}”...",
+    "توقف Microsoft Office عن الاستجابة أثناء تحويل الملف، فأوقفناه. جرّب فتح الملف في Office للتأكد أنه سليم وغير محمي، ثم أعد المحاولة.":
+        "Microsoft Office stopped responding while converting the file, so we stopped it. Open the file in Office to check it isn't damaged or protected, then try again.",
+    "الملف محمي بكلمة مرور. افتحه في Office واحفظه بدون كلمة مرور، ثم حوّله.":
+        "The file is password-protected. Open it in Office, save it without a password, then convert it.",
+    "لم يُنشئ Office ملف PDF لهذا الملف.":
+        "Office didn't create a PDF for this file.",
+    "توقف LibreOffice عن الاستجابة أثناء التحويل، فأوقفناه.":
+        "LibreOffice stopped responding during the conversion, so we stopped it.",
+    "يحوّل «{0}» عبر LibreOffice — مضى {1} ث":
+        "Converting “{0}” with LibreOffice — {1} s elapsed",
+    "— مضى {0} ث من حوالي {1} ث":
+        "— {0} s elapsed of about {1} s",
+    "يحوّل «{0}» ({1} صفحة)":
+        "Converting “{0}” ({1} pages)",
+    "— مضى {0} ث (يأخذ وقتًا أطول قليلًا من المتوقع)":
+        "— {0} s elapsed (taking a little longer than expected)",
+    "— مضى {0} ث":
+        "— {0} s elapsed",
+    "يحوّل «{0}» ({1} ورقة)":
+        "Converting “{0}” ({1} sheets)",
+    "يحوّل «{0}» ({1} شريحة)":
+        "Converting “{0}” ({1} slides)",
+    "<br><b>المدة:</b> Word يحتاج بضع ثوانٍ ليبدأ، والمستندات العربية تأخذ حوالي ثانية ونصف لكل صفحة. ستظهر المدة المتوقعة أثناء التحويل، ويمكنك الإلغاء في أي وقت.":
+        "<br><b>Time:</b> Word needs a few seconds to start, and Arabic documents take about a second and a half per page. The expected time is shown during the conversion, and you can cancel at any time.",
 }

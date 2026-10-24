@@ -396,6 +396,7 @@ class OutDirRow(QWidget):
 # ---------------------------------------------------------------- تشغيل في الخلفية
 class _Bridge(QObject):
     progress = Signal(float)
+    status = Signal(str)
     finished = Signal(str, str, str)  # النوع (ok/cancel/error)، الرسالة، المسار
 
 
@@ -416,6 +417,7 @@ class RunBar(QWidget):
         self.on_done = None
         self.bridge = _Bridge()
         self.bridge.progress.connect(self._show)
+        self.bridge.status.connect(lambda t: self.busy and not self.cancelled and self.set_status(t))
         self.bridge.finished.connect(self._finish)
         lay = QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
@@ -459,8 +461,12 @@ class RunBar(QWidget):
             self.cancelled = True
             self.set_status(tr("جاري الإلغاء... سيتوقف بعد انتهاء الخطوة الحالية"), "warn")
 
-    def run(self, job, start_text=tr("جاري التنفيذ...")):
-        """job(progress) -> رسالة أو (رسالة، مسار الناتج). progress(done, total) يرفع Cancelled عند الإلغاء."""
+    def run(self, job, start_text=tr("جاري التنفيذ..."), lock=True):
+        """
+        job(progress) -> رسالة أو (رسالة، مسار الناتج). progress(done, total) يرفع Cancelled عند الإلغاء،
+        وله progress.cancelled() و progress.status(نص) لمن يحتاجهما (مثل تحويل Office).
+        lock=False للمهام التي لا تستخدم PyMuPDF، حتى لا تتجمد عروض الصفحات في باقي البرنامج.
+        """
         if self.busy:
             QMessageBox.information(self, tr("انتظر"), tr("هناك عملية قيد التنفيذ. انتظر حتى تنتهي أو اضغط «إلغاء»."))
             return
@@ -480,9 +486,15 @@ class RunBar(QWidget):
                 raise core.Cancelled()
             self.bridge.progress.emit(max(0.0, min(1.0, done / total)) if total else 0.0)
 
+        progress.cancelled = lambda: self.cancelled
+        progress.status = self.bridge.status.emit
+
         def target():
             try:
-                with core.FITZ_LOCK:
+                if lock:
+                    with core.FITZ_LOCK:
+                        res = job(progress)
+                else:
                     res = job(progress)
                 msg, path = res if isinstance(res, tuple) else (res, None)
                 self.bridge.finished.emit("ok", msg, path or "")

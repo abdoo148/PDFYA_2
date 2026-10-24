@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5.0
+- **Much faster OCR and PDF → Word**: pages are processed in parallel on several CPU cores (a 12-page PDF → Word went from ~49 s to ~13 s), with page-by-page progress and instant cancel.
+- **Word / Excel / PowerPoint → PDF** is faster and safer: one Office instance per batch, silent opening (no hidden dialogs or macros), a time estimate while converting, real cancel and timeouts, and password-protected files fail quickly with a clear message.
+- The app stays responsive during Office conversions.
+- Update check now reads the latest GitHub release.
+
 ## 1.4.0
 - **Edit PDF** page: edit existing text, add text and images, highlight / underline / strikethrough, freehand drawing, rectangles, ellipses, lines, arrows, whiteout, permanent redaction, sticky notes, undo.
 - **English interface** with a full left-to-right layout; switch languages from the sidebar.

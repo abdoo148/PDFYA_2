@@ -125,4 +125,8 @@ class OperationPage(QWidget):
         self.error.hide()
         job = self.make_job(o.key, paths)
         if job:
-            self.run.run(job)
+            self.run.run(job, lock=self.uses_pdf_engine(o.key))
+
+    def uses_pdf_engine(self, key):
+        """False للعمليات التي لا تستخدم PyMuPDF (مثل Office)، فلا تُقفل عرض الصفحات أثناءها."""
+        return True

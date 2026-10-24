@@ -30,7 +30,7 @@ rem onedir (not onefile): opens in ~7s instead of 30s+ and triggers fewer antivi
 pyinstaller --noconfirm --clean --onedir --windowed --noupx --name PDFYA ^
   --icon assets\icon.ico --version-file version_info.txt --splash assets\splash.png ^
   --add-data "assets;assets" --add-data "LICENSE.txt;." --add-data "THIRD_PARTY_NOTICES.txt;." ^
-  --collect-all pptx --collect-all docx --collect-all pdf2docx --collect-all pymupdf ^
+  --collect-all pptx --collect-all docx --collect-all pdf2docx --collect-all docxcompose --exclude-module babel --collect-all pymupdf ^
   --hidden-import i18n_en --hidden-import win32com.client --hidden-import pythoncom app.py >> "%LOG%" 2>&1 || goto :err
 
 python prune_build.py >> "%LOG%" 2>&1
