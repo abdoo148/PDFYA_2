@@ -73,7 +73,7 @@ Made by **Codpact — Codpact Digital Solutions**
 
 ## Download
 
-**[⬇ Download PDFYA-Setup-1.4.0.exe](https://github.com/abdoo148/PDFYA_2/releases/download/v1.4.0/PDFYA-Setup-1.4.0.exe)** (installer, ~87 MB, no admin rights needed) —
+**[⬇ Download PDFYA-Setup-1.5.0.exe](https://github.com/abdoo148/PDFYA_2/releases/download/v1.5.0/PDFYA-Setup-1.5.0.exe)** (installer, ~87 MB, no admin rights needed) —
 or see all versions on the [Releases page](https://github.com/abdoo148/PDFYA_2/releases/latest).
 
 Optional extras:

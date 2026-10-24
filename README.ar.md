@@ -70,7 +70,7 @@
 
 ## التنزيل
 
-**[⬇ تنزيل PDFYA-Setup-1.4.0.exe](https://github.com/abdoo148/PDFYA_2/releases/download/v1.4.0/PDFYA-Setup-1.4.0.exe)** (ملف التثبيت، حوالي 87 ميجا، لا يحتاج صلاحيات مسؤول) —
+**[⬇ تنزيل PDFYA-Setup-1.5.0.exe](https://github.com/abdoo148/PDFYA_2/releases/download/v1.5.0/PDFYA-Setup-1.5.0.exe)** (ملف التثبيت، حوالي 87 ميجا، لا يحتاج صلاحيات مسؤول) —
 أو شاهد كل الإصدارات في [صفحة الإصدارات](https://github.com/abdoo148/PDFYA_2/releases/latest).
 
 إضافات اختيارية:
